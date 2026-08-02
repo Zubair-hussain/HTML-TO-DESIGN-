@@ -1,0 +1,8 @@
+{
+  "name": "HTML to Figma Design Importer",
+  "id": "html-to-figma-design-importer",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"]
+}

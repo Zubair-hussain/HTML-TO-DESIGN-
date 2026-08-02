@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: #1f1f1f;
+        background: #f5f5f5;
+        font: 12px Inter, Arial, sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 12px;
+      }
+
+      .card {
+        width: 100%;
+        border: 1px solid #d9d9d9;
+        border-radius: 6px;
+        background: #ffffff;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px;
+        border-bottom: 1px solid #e5e5e5;
+        background: #ffffff;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0;
+        font-weight: 600;
+      }
+
+      .badge {
+        border-radius: 4px;
+        background: #e3f7ed;
+        color: #00875a;
+        padding: 4px 7px;
+        font-weight: 600;
+      }
+
+      .content {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      textarea {
+        width: 100%;
+        height: 220px;
+        resize: vertical;
+        border: 1px solid #bdbdbd;
+        border-radius: 4px;
+        padding: 10px;
+        color: #1f1f1f;
+        background: #ffffff;
+        font: 11px Consolas, monospace;
+        outline: 0;
+      }
+
+      textarea:focus {
+        border-color: #18a0fb;
+        box-shadow: 0 0 0 2px rgba(24, 160, 251, 0.25);
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .summary div {
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        padding: 10px;
+        background: #fafafa;
+      }
+
+      .summary strong,
+      .summary span {
+        display: block;
+      }
+
+      .summary strong {
+        font-size: 18px;
+      }
+
+      .summary span,
+      #status {
+        color: #6b6b6b;
+      }
+
+      button {
+        width: 100%;
+        height: 40px;
+        border: 0;
+        border-radius: 6px;
+        color: white;
+        background: #18a0fb;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+      }
+
+      button:hover {
+        background: #0d8de3;
+      }
+
+      button:disabled {
+        cursor: wait;
+        background: #14ae5c;
+      }
+
+      .loader {
+        width: 16px;
+        height: 16px;
+        display: none;
+        border: 2px solid rgba(255, 255, 255, 0.45);
+        border-top-color: #ffffff;
+        border-radius: 999px;
+        animation: spin 0.7s linear infinite;
+      }
+
+      .loading .loader {
+        display: inline-block;
+      }
+
+      .loading .button-text {
+        color: #f2fff8;
+      }
+
+      #status {
+        min-height: 18px;
+      }
+
+      .status-ok {
+        color: #00875a;
+        font-weight: 600;
+      }
+
+      .status-error {
+        color: #d91e18;
+        font-weight: 600;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="card-header">
+        <h1>Figma Import Studio</h1>
+        <span class="badge">Design creator</span>
+      </div>
+      <section class="content">
+        <textarea id="payload" placeholder="Paste figma-design.json from the dashboard"></textarea>
+        <div class="summary">
+          <div><strong id="nodeCount">0</strong><span>Nodes</span></div>
+          <div><strong id="colorCount">0</strong><span>Colors</span></div>
+          <div><strong id="fontCount">0</strong><span>Fonts</span></div>
+        </div>
+        <button id="import">
+          <span class="loader"></span>
+          <span class="button-text">Proceed</span>
+        </button>
+        <div id="status">Paste export JSON, then proceed.</div>
+      </section>
+    </main>
+
+    <script>
+      const payload = document.getElementById("payload");
+      const status = document.getElementById("status");
+      const button = document.getElementById("import");
+      const nodeCount = document.getElementById("nodeCount");
+      const colorCount = document.getElementById("colorCount");
+      const fontCount = document.getElementById("fontCount");
+
+      function countNodes(nodes) {
+        return (nodes || []).reduce((total, node) => total + 1 + countNodes(node.children), 0);
+      }
+
+      function setStatus(message, type) {
+        status.textContent = message;
+        status.className = type ? `status-${type}` : "";
+      }
+
+      function setLoading(isLoading) {
+        button.disabled = isLoading;
+        button.classList.toggle("loading", isLoading);
+        button.querySelector(".button-text").textContent = isLoading ? "Creating design..." : "Proceed";
+      }
+
+      function updateSummary() {
+        try {
+          const design = JSON.parse(payload.value || "{}");
+          nodeCount.textContent = String(countNodes(design.nodes));
+          colorCount.textContent = String(design.tokens?.colors?.length || 0);
+          fontCount.textContent = String(design.tokens?.fonts?.length || 0);
+          setStatus(design.nodes ? "Ready to create the Figma design." : "Paste export JSON, then proceed.");
+        } catch {
+          nodeCount.textContent = "0";
+          colorCount.textContent = "0";
+          fontCount.textContent = "0";
+          setStatus("JSON is not valid yet.", "error");
+        }
+      }
+
+      payload.addEventListener("input", updateSummary);
+
+      button.onclick = () => {
+        try {
+          const design = JSON.parse(payload.value);
+          if (!Array.isArray(design.nodes)) throw new Error("missing nodes");
+          setLoading(true);
+          setStatus("Creating real Figma layers...", "ok");
+          parent.postMessage({ pluginMessage: { type: "IMPORT_DESIGN", payload: design } }, "*");
+        } catch {
+          setStatus("Paste valid figma-design.json before proceeding.", "error");
+        }
+      };
+
+      onmessage = (event) => {
+        if (event.data.pluginMessage?.type === "IMPORT_DONE") {
+          setLoading(false);
+          setStatus(event.data.pluginMessage.message, "ok");
+        }
+
+        if (event.data.pluginMessage?.type === "IMPORT_ERROR") {
+          setLoading(false);
+          setStatus(event.data.pluginMessage.message, "error");
+        }
+      };
+    </script>
+  </body>
+</html>
