@@ -1,9 +1,16 @@
 "use client";
 
 import { ChangeEvent, useMemo, useState } from "react";
-import { Braces, Download, FileJson, Globe, Layers3, PlugZap, Send, Upload } from "lucide-react";
-import { convertHtmlToDesign, DesignDocument, DesignNode, figmaPluginSnippet } from "@/lib/design-converter";
+import { Braces, Download, FileJson, Globe, Layers3, Palette, PlugZap, Send, Type, Upload, Frame } from "lucide-react";
+import {
+  convertHtmlToDesign,
+  DesignDocument,
+  DesignNode,
+  figmaPluginSnippet,
+  framerComponentSnippet
+} from "@/lib/design-converter";
 import { escapeHtml } from "@/lib/html";
+import { FONT_PAIRINGS, PREMIUM_PALETTES } from "@/lib/premium-tokens";
 
 const sampleHtml = `<main style="font-family: Inter; color: #17202a; background: #f7f4ef;">
   <section style="padding: 48px; background-color: #fff;">
@@ -35,6 +42,99 @@ function TreeNode({ node, depth = 0 }: { node: DesignNode; depth?: number }) {
   );
 }
 
+function copyText(value: string, onDone?: (msg: string) => void) {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    navigator.clipboard.writeText(value).then(() => onDone?.(`Copied ${value}`)).catch(() => onDone?.("Copy failed"));
+  }
+}
+
+function TokenSwatches({ design, onCopy }: { design: DesignDocument; onCopy: (msg: string) => void }) {
+  const { colors, fonts, fontSizes, fontWeights, radii } = design.tokens;
+  return (
+    <div className="tokens-view">
+      <div className="token-group">
+        <span className="token-label">Colors ({colors.length})</span>
+        <div className="swatch-row">
+          {colors.length === 0 && <em className="token-empty">No colors detected</em>}
+          {colors.map((color) => (
+            <button
+              key={color}
+              className="swatch"
+              title={`${color} — click to copy`}
+              style={{ background: color }}
+              onClick={() => copyText(color, onCopy)}
+            />
+          ))}
+        </div>
+      </div>
+      {[
+        { label: "Fonts", values: fonts },
+        { label: "Sizes", values: fontSizes },
+        { label: "Weights", values: fontWeights },
+        { label: "Radii", values: radii }
+      ].map((row) => (
+        <div className="token-group" key={row.label}>
+          <span className="token-label">
+            {row.label} ({row.values.length})
+          </span>
+          <div className="chip-row">
+            {row.values.length === 0 && <em className="token-empty">—</em>}
+            {row.values.map((value) => (
+              <button key={value} className="chip" title="Click to copy" onClick={() => copyText(value, onCopy)}>
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PremiumPanel({ onCopy }: { onCopy: (msg: string) => void }) {
+  return (
+    <div className="premium-panel">
+      <div className="panel-title">
+        <Palette size={18} /> Premium palettes
+      </div>
+      <div className="palette-list">
+        {PREMIUM_PALETTES.map((palette) => (
+          <div
+            key={palette.name}
+            className="palette-row"
+            title={`Copy ${palette.name} palette`}
+            onClick={() => copyText(palette.colors.join(", "), onCopy)}
+          >
+            <div className="palette-swatches">
+              {palette.colors.map((color) => (
+                <span key={color} style={{ background: color }} />
+              ))}
+            </div>
+            <span className="palette-name">{palette.name}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel-title">
+        <Type size={18} /> Font pairings
+      </div>
+      <div className="font-list">
+        {FONT_PAIRINGS.map((pairing) => (
+          <button
+            key={pairing.name}
+            className="font-row"
+            title="Copy Google Fonts <link> import"
+            onClick={() => copyText(`<link rel="stylesheet" href="${pairing.import}">`, onCopy)}
+          >
+            <strong>{pairing.heading}</strong>
+            <span>{pairing.body}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [sourceType, setSourceType] = useState<DesignDocument["sourceType"]>("html");
   const [html, setHtml] = useState(sampleHtml);
@@ -48,6 +148,7 @@ export default function Home() {
   const design = useMemo(() => convertHtmlToDesign(html, sourceType), [html, sourceType]);
   const exportJson = useMemo(() => JSON.stringify(design, null, 2), [design]);
   const pluginCode = useMemo(() => figmaPluginSnippet(design), [design]);
+  const framerCode = useMemo(() => framerComponentSnippet(design), [design]);
 
   async function fetchRemote(kind: "url" | "api") {
     const target = kind === "url" ? url : apiUrl;
@@ -121,6 +222,8 @@ export default function Home() {
           <input type="file" accept=".html,.htm,.txt,.json" onChange={onFileChange} />
         </label>
 
+        <PremiumPanel onCopy={setStatus} />
+
         <div className="mcp-panel">
           <div className="panel-title"><PlugZap size={18} /> MCP bridge</div>
           <input value={mcpEndpoint} onChange={(event) => setMcpEndpoint(event.target.value)} />
@@ -143,7 +246,8 @@ export default function Home() {
           </div>
           <div className="actions">
             <button onClick={() => download("figma-design.json", exportJson)}><Download size={18} /> JSON</button>
-            <button onClick={() => download("figma-plugin-import.js", pluginCode, "text/javascript")}><FileJson size={18} /> Plugin</button>
+            <button onClick={() => download("figma-plugin-import.js", pluginCode, "text/javascript")}><FileJson size={18} /> Figma</button>
+            <button onClick={() => download("FramerImportedDesign.tsx", framerCode, "text/plain")}><Frame size={18} /> Framer</button>
           </div>
         </header>
 
@@ -163,7 +267,8 @@ export default function Home() {
           </section>
 
           <section className="preview-pane">
-            <div className="pane-head"><strong>Design tree</strong><span>{design.sourceType}</span></div>
+            <div className="pane-head"><strong>Design tree &amp; tokens</strong><span>{design.sourceType}</span></div>
+            <TokenSwatches design={design} onCopy={setStatus} />
             <div className="tree">
               {design.nodes.map((node) => <TreeNode key={node.id} node={node} />)}
             </div>
