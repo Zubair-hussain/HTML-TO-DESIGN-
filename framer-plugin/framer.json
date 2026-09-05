@@ -1,0 +1,6 @@
+{
+  "id": "html-to-design-import",
+  "name": "HTML to Design Importer",
+  "modes": ["canvas"],
+  "icon": "/icon.svg"
+}

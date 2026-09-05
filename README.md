@@ -1,6 +1,38 @@
-# Figma Import Studio
+# Figma & Framer Import Studio
 
-Next.js app for converting HTML, website URLs, API responses, uploaded files, and editor drafts into a Figma-ready design document.
+Next.js app for converting HTML, website URLs, API responses, uploaded files, and editor drafts into a design document you can import into **Figma** or **Framer**.
+
+## How styles are resolved
+
+The converter resolves the full CSS cascade, not just inline `style=""` attributes:
+
+1. Every `<style>` block is parsed (dependency-free) into selector rules.
+2. Rules are matched against the DOM (via cheerio) and merged per element by CSS specificity and source order.
+3. Inheritable properties (color, font, text-align, …) flow from `<body>` down to every node.
+4. Inline `style=""` wins last, exactly like the browser cascade.
+
+Result: real backgrounds, colors, fonts, weights, spacing, radii, and flex direction land on each node — instead of the empty styling that produced boilerplate before. Mobile-only (`max-width`) media queries are skipped so the desktop base layout is imported.
+
+For **URL imports**, external stylesheets (`<link rel="stylesheet">`) are fetched and inlined before conversion — each through the same SSRF guard as the page fetch (public-host check, size/time limits). For heavily scripted sites, paste the rendered HTML.
+
+## Premium tokens
+
+The sidebar includes a **Premium palettes** and **Font pairings** library (see `lib/premium-tokens.ts`). Click a palette to copy its colors, or a font pairing to copy its Google Fonts `<link>`. The preview pane also shows the design's own extracted tokens (colors, fonts, sizes, weights, radii) as clickable swatches.
+
+## Targets
+
+- **Figma** — see `figma-plugin/` and the JSON/Figma exports below.
+- **Framer** — two paths: the `FramerImportedDesign.tsx` **code component** export (no build, most style-faithful) and the native **`framer-plugin/`** (builds real canvas layers). See `framer-plugin/README.md`.
+
+## CI/CD & security
+
+GitHub Actions in `.github/workflows/`:
+
+- `ci.yml` — lint, typecheck, test, and build on Node 20 & 22; plus a Conventional-Commits check on PRs.
+- `codeql.yml` — CodeQL security + quality scanning (push, PR, weekly).
+- `security.yml` — `npm audit` (high+) and dependency-review on PRs.
+- `release.yml` — on a successful production **deployment** (`deployment_status`), re-runs the full gate and cuts a GitHub Release with generated notes.
+- `.github/dependabot.yml` — weekly npm and GitHub-Actions updates.
 
 ## Run Locally
 
@@ -20,8 +52,9 @@ Open `http://localhost:3000`.
 
 ## Exports
 
-- `figma-design.json`: structured design document with nodes, text, links, images, inline styles, colors, and fonts.
-- `figma-plugin-import.js`: starter bridge snippet for a Figma plugin UI.
+- `figma-design.json`: structured design document with nodes, text, links, images, resolved styles, colors, fonts, sizes, weights, and radii.
+- `figma-plugin-import.js`: bridge snippet that posts the design into the Figma plugin UI.
+- `FramerImportedDesign.tsx`: a self-contained React component rendering the design with real styles. In Framer, open **Assets → Code → New Code File** and paste it; it becomes an insertable component. Works as a live React preview anywhere too.
 
 ## Load The Figma Plugin
 
