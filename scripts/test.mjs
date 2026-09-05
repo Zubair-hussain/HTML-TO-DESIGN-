@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { readFile } from "node:fs/promises";
-import { convertHtmlToDesign, figmaPluginSnippet } from "../lib/design-converter.ts";
+import { convertHtmlToDesign, figmaPluginSnippet, framerComponentSnippet } from "../lib/design-converter.ts";
 import { escapeHtml } from "../lib/html.ts";
+import { extractStylesheetLinks, injectStyles } from "../lib/inline-css.ts";
 import { isPrivateIp, MAX_RESPONSE_BYTES, readLimitedText } from "../lib/fetch-safety.ts";
 import { POST } from "../app/api/fetch-url/route.ts";
 
@@ -56,6 +57,37 @@ describe("HTML to design converter", () => {
     assert.equal(main.children[3].src, "/hero.png");
   });
 
+  it("resolves CSS from <style> blocks and class selectors, not just inline styles", () => {
+    const html = `<!doctype html><html><head><style>
+      body { color: #222; font-family: 'Poppins'; }
+      .hero { background: #0071e3; padding: 40px; border-radius: 16px; }
+      .hero h1 { color: #ffffff; font-size: 48px; }
+      @media (max-width: 600px) { .hero { padding: 8px; } }
+    </style></head><body><section class="hero"><h1>Hi</h1></section></body></html>`;
+    const design = convertHtmlToDesign(html, "html");
+    const hero = design.nodes[0];
+    const h1 = hero.children[0];
+
+    assert.equal(hero.styles["background"], "#0071e3");
+    assert.equal(hero.styles["border-radius"], "16px");
+    // Mobile-only max-width override must not clobber the desktop padding.
+    assert.equal(hero.styles["padding"], "40px");
+    // Descendant selector wins over inherited body color; body font-family inherits down.
+    assert.equal(h1.styles["color"], "#ffffff");
+    assert.equal(h1.styles["font-family"], "'Poppins'");
+    assert.ok(design.tokens.colors.includes("#0071e3"));
+    assert.ok(design.tokens.fontSizes.includes("48px"));
+  });
+
+  it("emits a Framer React component snippet from the design tree", () => {
+    const design = convertHtmlToDesign("<main><h1>Framer</h1></main>", "html");
+    const snippet = framerComponentSnippet(design);
+
+    assert.match(snippet, /export default function ImportedDesign/);
+    assert.match(snippet, /import \* as React/);
+    assert.match(snippet, /Framer/);
+  });
+
   it("creates a Figma plugin import snippet with the current design payload", () => {
     const design = convertHtmlToDesign("<h1>Hello Figma</h1>", "html");
     const snippet = figmaPluginSnippet(design);
@@ -63,6 +95,34 @@ describe("HTML to design converter", () => {
     assert.match(snippet, /figma\.showUI/);
     assert.match(snippet, /IMPORT_DESIGN/);
     assert.match(snippet, /Hello Figma/);
+  });
+});
+
+describe("External CSS inlining", () => {
+  it("extracts and resolves stylesheet links against a base URL", () => {
+    const html = `<html><head>
+      <link rel="stylesheet" href="/styles/app.css">
+      <link rel="preload stylesheet" href="https://cdn.example.com/theme.css">
+      <link rel="icon" href="/favicon.ico">
+      <link rel="stylesheet" href="data:text/css,body{}">
+      <link rel="stylesheet" href="/styles/app.css">
+    </head><body></body></html>`;
+    const links = extractStylesheetLinks(html, "https://site.test/page");
+
+    assert.deepEqual(links, [
+      "https://site.test/styles/app.css",
+      "https://cdn.example.com/theme.css"
+    ]);
+  });
+
+  it("injects fetched CSS as <style> blocks into <head>", () => {
+    const out = injectStyles("<html><head></head><body><p>Hi</p></body></html>", [
+      { href: "https://cdn.example.com/theme.css", css: ".x{color:red}" },
+      { css: "" }
+    ]);
+
+    assert.match(out, /<style data-imported-href="https:\/\/cdn\.example\.com\/theme\.css">/);
+    assert.match(out, /\.x\{color:red\}/);
   });
 });
 
